@@ -786,8 +786,10 @@ async function fetchPriceFromSource(src) {
     const d = await res.json();
     const price = parseFloat(d.lastPrice);
     const change24h = parseFloat(d.priceChangePercent);
+    const high24h = parseFloat(d.highPrice);
+    const low24h = parseFloat(d.lowPrice);
     if (!price) throw new Error('no price');
-    return { price, change24h };
+    return { price, change24h, high24h, low24h };
   } else if (src === 1) {
     // Kraken public REST
     const res = await fetch('https://api.kraken.com/0/public/Ticker?pair=ETHUSD', { cache: 'no-store' });
@@ -815,12 +817,14 @@ async function pollPrice() {
   for (let i = 0; i < sources.length; i++) {
     const src = (priceSource + i) % 3;
     try {
-      const { price, change24h } = await fetchPriceFromSource(src);
+      const { price, change24h, high24h, low24h } = await fetchPriceFromSource(src);
       priceSource = src; // stick with what worked
       priceFailCount = 0;
 
       STATE.price = price;
       if (change24h != null) STATE.price24hAgo = price / (1 + change24h / 100);
+      if (high24h) STATE.high24h = high24h;
+      if (low24h) STATE.low24h = low24h;
 
       $('livePrice').textContent = '$' + fmt(price);
       const cp = $('priceChange24h');
@@ -1301,7 +1305,7 @@ function computeSignal(candles, price, fearGreed, tvl, globalData) {
   // Support / Resistance levels for the levels panel (directionally enforced)
   const highsAbove = recentHighs.filter(h => h > price * 1.005);
   const lowsBelow  = recentLows.filter(l => l < price * 0.995);
-  const res1 = highsAbove[0]                          || price * 1.06;
+  const res1 = STATE.high24h && STATE.high24h > price ? STATE.high24h : (highsAbove[0] || price * 1.06);
   const res2 = highsAbove.find(h => h > res1 * 1.01) || price * 1.14;
   const res3 = ema200 ? Math.max(ema200, price*1.10)  : price * 1.22;
   const sup1 = lowsBelow[0]                           || price * 0.95;
@@ -1544,7 +1548,7 @@ function renderLevels(d, price) {
     </div>`;
   }
   $('resistanceLevels').innerHTML = [
-    levelRow('R1 (Recent High)', d.res1, 'res', price),
+    levelRow('R1 (24h High)', d.res1, 'res', price),
     levelRow('R2 (Key Zone)', Math.max(d.res2, price*1.06), 'res', price),
     levelRow('R3 (Major)', Math.max(d.res3, price*1.15), 'res', price),
     d.ichi ? levelRow('Ichimoku Cloud Top', Math.max(d.ichi.senkouA, d.ichi.senkouB), 'res', price) : '',
