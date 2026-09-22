@@ -512,6 +512,15 @@
       <div class="trade-row"><div class="trade-lbl">Size Suggestion</div><div class="trade-val" id="tradeSzSuggest">—</div></div>
     </div>
     <div class="divider"></div>
+    <div class="section-header">Position Sizer — Test Mode</div>
+    <div style="margin-bottom:10px;font-size:11px;color:var(--text2);">Enter your test budget and the tool recommends how to size across tiers.</div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px;">
+      <span style="font-size:12px;color:var(--text2);">Test Budget $</span>
+      <input type="number" id="testBudget" value="500" min="0" style="width:90px;background:var(--bg4);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-family:'DM Mono',monospace;font-size:13px;">
+      <button class="btn btn-outline btn-sm" onclick="calcPositionSize()">Calc</button>
+    </div>
+    <div id="sizingOutput" style="font-size:12px;color:var(--text2);line-height:1.8;"></div>
+    <div class="divider"></div>
     <div class="section-header">Paste Robinhood Position Update</div>
     <div class="rh-input-area">
       <textarea id="rhPaste" placeholder="Paste your Robinhood ETH position details here (qty, avg cost, current value)…&#10;&#10;Or enter manually above and click Update."></textarea>
@@ -545,6 +554,148 @@
 
 </div><!-- end main-grid -->
 </div><!-- end scroll wrap -->
+
+<!-- TRADE LOG -->
+<div style="padding:0 24px 24px;" id="tradeLogWrap">
+  <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:20px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--gold);">📋 Trade Log &amp; Accuracy Tracker</div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-outline btn-sm" onclick="toggleLogForm()">+ Log Trade</button>
+        <button class="btn btn-outline btn-sm" onclick="exportLog()">Export CSV</button>
+      </div>
+    </div>
+
+    <!-- Accuracy Summary Bar -->
+    <div id="accuracySummary" style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:16px;">
+      <div style="background:var(--bg3);border-radius:8px;padding:10px;text-align:center;">
+        <div style="font-size:18px;font-weight:700;font-family:'DM Mono',monospace;" id="logTotalTrades">0</div>
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin-top:2px;">Trades</div>
+      </div>
+      <div style="background:var(--bg3);border-radius:8px;padding:10px;text-align:center;">
+        <div style="font-size:18px;font-weight:700;font-family:'DM Mono',monospace;color:var(--green);" id="logWinRate">—</div>
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin-top:2px;">Win Rate</div>
+      </div>
+      <div style="background:var(--bg3);border-radius:8px;padding:10px;text-align:center;">
+        <div style="font-size:18px;font-weight:700;font-family:'DM Mono',monospace;" id="logAvgRR">—</div>
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin-top:2px;">Avg R:R</div>
+      </div>
+      <div style="background:var(--bg3);border-radius:8px;padding:10px;text-align:center;">
+        <div style="font-size:18px;font-weight:700;font-family:'DM Mono',monospace;" id="logTotalPnl">—</div>
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin-top:2px;">Total P&amp;L</div>
+      </div>
+      <div style="background:var(--bg3);border-radius:8px;padding:10px;text-align:center;">
+        <div style="font-size:18px;font-weight:700;font-family:'DM Mono',monospace;" id="logT1Hit">—</div>
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin-top:2px;">T1 Hit %</div>
+      </div>
+      <div style="background:var(--bg3);border-radius:8px;padding:10px;text-align:center;">
+        <div style="font-size:18px;font-weight:700;font-family:'DM Mono',monospace;" id="logSignalAcc">—</div>
+        <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin-top:2px;">Signal Acc.</div>
+      </div>
+    </div>
+
+    <!-- Log Entry Form (hidden by default) -->
+    <div id="logForm" style="display:none;background:var(--bg3);border-radius:8px;padding:16px;margin-bottom:16px;">
+      <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;">Log a Trade</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px;">
+        <div>
+          <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">Signal at Entry</div>
+          <select id="logSignal" style="width:100%;background:var(--bg4);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px;">
+            <option value="STRONG_BUY">STRONG BUY</option>
+            <option value="BUY" selected>BUY</option>
+            <option value="HOLD">HOLD</option>
+            <option value="SELL">SELL</option>
+            <option value="STRONG_SELL">STRONG SELL</option>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">Entry Tier</div>
+          <select id="logTier" style="width:100%;background:var(--bg4);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px;">
+            <option value="Now">Now (aggressive)</option>
+            <option value="Better" selected>Better (EMA21)</option>
+            <option value="Best">Best (EMA50/Fib)</option>
+          </select>
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">Entry Price $</div>
+          <input type="number" id="logEntryPrice" placeholder="e.g. 2720" style="width:100%;background:var(--bg4);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px;">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">Amount Spent $</div>
+          <input type="number" id="logAmount" placeholder="e.g. 100" style="width:100%;background:var(--bg4);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px;">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">T1 Target $ (tool said)</div>
+          <input type="number" id="logT1" placeholder="e.g. 3100" style="width:100%;background:var(--bg4);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px;">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">Stop Loss $ (tool said)</div>
+          <input type="number" id="logSL" placeholder="e.g. 2500" style="width:100%;background:var(--bg4);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px;">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">Exit Price $ (when sold)</div>
+          <input type="number" id="logExitPrice" placeholder="Leave blank if open" style="width:100%;background:var(--bg4);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px;">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">Exit Date</div>
+          <input type="date" id="logExitDate" style="width:100%;background:var(--bg4);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px;">
+        </div>
+        <div>
+          <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">Outcome</div>
+          <select id="logOutcome" style="width:100%;background:var(--bg4);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px;">
+            <option value="open">Still Open</option>
+            <option value="t1">Hit T1</option>
+            <option value="t2">Hit T2</option>
+            <option value="sl">Stopped Out</option>
+            <option value="manual">Manual Exit</option>
+          </select>
+        </div>
+      </div>
+      <div style="margin-bottom:10px;">
+        <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">Notes (optional)</div>
+        <input type="text" id="logNotes" placeholder="e.g. Bought the dip at EMA21, exited before weekend" style="width:100%;background:var(--bg4);border:1px solid var(--border);border-radius:6px;padding:6px 8px;color:var(--text);font-size:12px;">
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-gold btn-sm" onclick="saveLogEntry()">Save Trade</button>
+        <button class="btn btn-outline btn-sm" onclick="toggleLogForm()">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Paste from Robinhood -->
+    <div style="margin-bottom:12px;">
+      <div style="font-size:11px;color:var(--text2);margin-bottom:6px;">Or paste trade data from Robinhood / brokerage:</div>
+      <div style="display:flex;gap:8px;">
+        <textarea id="logPaste" rows="2" placeholder="Paste brokerage trade data here…" style="flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:8px;color:var(--text);font-size:12px;resize:vertical;"></textarea>
+        <button class="btn btn-outline btn-sm" style="align-self:flex-start;" onclick="parseLogPaste()">Parse</button>
+      </div>
+    </div>
+
+    <!-- Trade Log Table -->
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:12px;" id="tradeLogTable">
+        <thead>
+          <tr style="border-bottom:1px solid var(--border);color:var(--text2);text-transform:uppercase;letter-spacing:1px;font-size:10px;">
+            <th style="padding:8px 6px;text-align:left;">Date</th>
+            <th style="padding:8px 6px;text-align:left;">Signal</th>
+            <th style="padding:8px 6px;text-align:left;">Tier</th>
+            <th style="padding:8px 6px;text-align:right;">Entry $</th>
+            <th style="padding:8px 6px;text-align:right;">Amount</th>
+            <th style="padding:8px 6px;text-align:right;">T1 Target</th>
+            <th style="padding:8px 6px;text-align:right;">Stop</th>
+            <th style="padding:8px 6px;text-align:right;">Exit $</th>
+            <th style="padding:8px 6px;text-align:right;">P&amp;L</th>
+            <th style="padding:8px 6px;text-align:left;">Outcome</th>
+            <th style="padding:8px 6px;text-align:left;">Notes</th>
+            <th style="padding:8px 6px;"></th>
+          </tr>
+        </thead>
+        <tbody id="tradeLogBody">
+          <tr><td colspan="12" style="padding:20px;text-align:center;color:var(--text3);">No trades logged yet. Hit "+ Log Trade" to start.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
 
 <div style="padding:12px 24px 32px;text-align:center;font-size:10px;color:var(--text3);">
   Data: Binance (price) · CoinGecko (history) · Alternative.me (Fear &amp; Greed) · DeFiLlama (TVL) · Manual inputs for derivatives/on-chain · Refreshes every 60s automatically<br>
@@ -1879,6 +2030,234 @@ startPricePoll();
 
 // Full signal re-analysis every 90 seconds regardless
 setInterval(runFullAnalysis, 90000);
+
+// ============================================================
+// POSITION SIZER
+// ============================================================
+function calcPositionSize() {
+  const budget = parseFloat($('testBudget').value) || 500;
+  const price = STATE.price || 2800;
+  const d = STATE.signalData || {};
+  const sig = d.signal || 'BUY';
+
+  // Tier allocation: more at Better/Best, less at Now (price-chasing risk)
+  const allocs = { STRONG_BUY: [0.30, 0.40, 0.30], BUY: [0.25, 0.40, 0.35], HOLD: [0, 0.50, 0.50], SELL: [0,0,0], STRONG_SELL: [0,0,0] };
+  const [nowPct, betterPct, bestPct] = allocs[sig] || [0.25, 0.40, 0.35];
+
+  const ema21 = d.ema21 || price * 0.955;
+  const ema50 = d.ema50 || price * 0.915;
+  const fib50 = d.fib?.fib50 || price * 0.91;
+  const tier2 = Math.max(ema21, price * 0.94);
+  const tier3 = Math.max(Math.min(ema50, fib50), price * 0.86);
+
+  const nowAmt    = (budget * nowPct).toFixed(0);
+  const betterAmt = (budget * betterPct).toFixed(0);
+  const bestAmt   = (budget * bestPct).toFixed(0);
+
+  const nowEth    = (nowAmt / price).toFixed(4);
+  const betterEth = (betterAmt / tier2).toFixed(4);
+  const bestEth   = (bestAmt / tier3).toFixed(4);
+
+  const isBullish = sig === 'BUY' || sig === 'STRONG_BUY';
+  if (!isBullish) {
+    $('sizingOutput').innerHTML = `<span style="color:var(--yellow)">Signal is ${sig} — no new longs recommended. Hold or reduce.</span>`;
+    return;
+  }
+
+  $('sizingOutput').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px;">
+      <div style="background:var(--bg4);border-radius:6px;padding:8px;">
+        <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">NOW <span style="color:var(--text3)">(${(nowPct*100).toFixed(0)}%)</span></div>
+        <div style="font-weight:700;color:var(--yellow);">$${nowAmt}</div>
+        <div style="font-size:11px;color:var(--text2);">${nowEth} ETH @ ~$${fmt(price,0)}</div>
+        <div style="font-size:10px;color:var(--text3);">Aggressive — at current price</div>
+      </div>
+      <div style="background:var(--bg4);border-radius:6px;padding:8px;">
+        <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">BETTER <span style="color:var(--text3)">(${(betterPct*100).toFixed(0)}%)</span></div>
+        <div style="font-weight:700;color:var(--green);">$${betterAmt}</div>
+        <div style="font-size:11px;color:var(--text2);">${betterEth} ETH @ ~$${fmt(tier2,0)}</div>
+        <div style="font-size:10px;color:var(--text3);">EMA21 zone — wait for it</div>
+      </div>
+      <div style="background:var(--bg4);border-radius:6px;padding:8px;">
+        <div style="font-size:10px;color:var(--text2);margin-bottom:4px;">BEST <span style="color:var(--text3)">(${(bestPct*100).toFixed(0)}%)</span></div>
+        <div style="font-weight:700;color:var(--strong-buy);">$${bestAmt}</div>
+        <div style="font-size:11px;color:var(--text2);">${bestEth} ETH @ ~$${fmt(tier3,0)}</div>
+        <div style="font-size:10px;color:var(--text3);">EMA50/Fib — deep dip buy</div>
+      </div>
+    </div>
+    <div style="font-size:11px;color:var(--text3);">⚠️ Test mode — small amounts only. Don't deploy full capital until signal accuracy is validated over 10+ trades.</div>
+  `;
+}
+
+// ============================================================
+// TRADE LOG
+// ============================================================
+let TRADE_LOG = [];
+
+function loadTradeLog() {
+  try { TRADE_LOG = JSON.parse(localStorage.getItem('vj_eth_log') || '[]'); } catch(e) { TRADE_LOG = []; }
+  renderTradeLog();
+}
+
+function saveTradeLog() {
+  try { localStorage.setItem('vj_eth_log', JSON.stringify(TRADE_LOG)); } catch(e) {}
+}
+
+function toggleLogForm() {
+  const f = $('logForm');
+  f.style.display = f.style.display === 'none' ? 'block' : 'none';
+  // Auto-fill from current signal
+  if (f.style.display === 'block' && STATE.signalData?.signal) {
+    $('logSignal').value = STATE.signalData.signal;
+    if (STATE.price) $('logEntryPrice').value = STATE.price.toFixed(0);
+    if (STATE.signalData.target1) $('logT1').value = STATE.signalData.target1.toFixed(0);
+    if (STATE.signalData.stopLoss) $('logSL').value = STATE.signalData.stopLoss.toFixed(0);
+  }
+}
+
+function saveLogEntry() {
+  const entry = {
+    id: Date.now(),
+    date: new Date().toISOString().slice(0,10),
+    signal: $('logSignal').value,
+    tier: $('logTier').value,
+    entryPrice: parseFloat($('logEntryPrice').value) || null,
+    amount: parseFloat($('logAmount').value) || null,
+    t1: parseFloat($('logT1').value) || null,
+    sl: parseFloat($('logSL').value) || null,
+    exitPrice: parseFloat($('logExitPrice').value) || null,
+    exitDate: $('logExitDate').value || null,
+    outcome: $('logOutcome').value,
+    notes: $('logNotes').value,
+  };
+  if (!entry.entryPrice || !entry.amount) { alert('Entry price and amount are required.'); return; }
+  TRADE_LOG.unshift(entry);
+  saveTradeLog();
+  renderTradeLog();
+  // Clear form
+  ['logEntryPrice','logAmount','logT1','logSL','logExitPrice','logNotes'].forEach(id => $(id).value = '');
+  $('logExitDate').value = '';
+  $('logOutcome').value = 'open';
+  toggleLogForm();
+  showToast('Trade logged ✓', true);
+}
+
+function updateLogEntry(id, field, value) {
+  const t = TRADE_LOG.find(t => t.id === id);
+  if (!t) return;
+  t[field] = value === '' ? null : isNaN(value) ? value : parseFloat(value);
+  if (field === 'exitPrice' && t.exitPrice && t.outcome === 'open') t.outcome = 'manual';
+  saveTradeLog();
+  renderTradeLog();
+}
+
+function deleteLogEntry(id) {
+  if (!confirm('Delete this trade?')) return;
+  TRADE_LOG = TRADE_LOG.filter(t => t.id !== id);
+  saveTradeLog();
+  renderTradeLog();
+}
+
+function outcomeLabel(o) {
+  return {open:'🔵 Open', t1:'✅ T1 Hit', t2:'🏆 T2 Hit', sl:'❌ Stopped', manual:'🟡 Manual'}[o] || o;
+}
+
+function renderTradeLog() {
+  const tbody = $('tradeLogBody');
+  if (!TRADE_LOG.length) {
+    tbody.innerHTML = '<tr><td colspan="12" style="padding:20px;text-align:center;color:var(--text3);">No trades logged yet. Hit "+ Log Trade" to start.</td></tr>';
+    updateAccuracy();
+    return;
+  }
+  tbody.innerHTML = TRADE_LOG.map(t => {
+    const pnl = t.exitPrice && t.amount && t.entryPrice
+      ? ((t.exitPrice - t.entryPrice) / t.entryPrice * t.amount)
+      : null;
+    const pnlStr = pnl != null ? `<span style="color:${pnl>=0?'var(--green)':'var(--red)'}">${pnl>=0?'+':''}$${Math.abs(pnl).toFixed(2)}</span>` : '—';
+    const sigColor = {STRONG_BUY:'var(--strong-buy)',BUY:'var(--green)',HOLD:'var(--yellow)',SELL:'var(--sell)',STRONG_SELL:'var(--red)'}[t.signal] || 'var(--text2)';
+    return `<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px 6px;color:var(--text2);white-space:nowrap;">${t.date}</td>
+      <td style="padding:8px 6px;font-weight:700;color:${sigColor};white-space:nowrap;">${t.signal?.replace('_',' ')}</td>
+      <td style="padding:8px 6px;color:var(--text2);">${t.tier}</td>
+      <td style="padding:8px 6px;text-align:right;font-family:'DM Mono',monospace;">$${t.entryPrice?.toLocaleString()}</td>
+      <td style="padding:8px 6px;text-align:right;font-family:'DM Mono',monospace;">$${t.amount?.toLocaleString()}</td>
+      <td style="padding:8px 6px;text-align:right;font-family:'DM Mono',monospace;color:var(--green);">${t.t1 ? '$'+t.t1.toLocaleString() : '—'}</td>
+      <td style="padding:8px 6px;text-align:right;font-family:'DM Mono',monospace;color:var(--red);">${t.sl ? '$'+t.sl.toLocaleString() : '—'}</td>
+      <td style="padding:8px 6px;text-align:right;">
+        <input type="number" value="${t.exitPrice||''}" placeholder="—" onchange="updateLogEntry(${t.id},'exitPrice',this.value)"
+          style="width:70px;background:var(--bg4);border:1px solid var(--border);border-radius:4px;padding:3px 5px;color:var(--text);font-size:11px;font-family:'DM Mono',monospace;">
+      </td>
+      <td style="padding:8px 6px;text-align:right;">${pnlStr}</td>
+      <td style="padding:8px 6px;">
+        <select onchange="updateLogEntry(${t.id},'outcome',this.value)"
+          style="background:var(--bg4);border:1px solid var(--border);border-radius:4px;padding:3px 5px;color:var(--text);font-size:11px;">
+          ${['open','t1','t2','sl','manual'].map(o=>`<option value="${o}"${t.outcome===o?' selected':''}>${outcomeLabel(o)}</option>`).join('')}
+        </select>
+      </td>
+      <td style="padding:8px 6px;color:var(--text2);font-size:11px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${t.notes||''}">${t.notes||''}</td>
+      <td style="padding:8px 6px;"><button onclick="deleteLogEntry(${t.id})" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:14px;">✕</button></td>
+    </tr>`;
+  }).join('');
+  updateAccuracy();
+}
+
+function updateAccuracy() {
+  const closed = TRADE_LOG.filter(t => t.outcome !== 'open');
+  const wins = closed.filter(t => t.outcome === 't1' || t.outcome === 't2' || (t.outcome === 'manual' && t.exitPrice && t.entryPrice && t.exitPrice > t.entryPrice));
+  const t1hits = TRADE_LOG.filter(t => t.outcome === 't1' || t.outcome === 't2');
+  const totalPnl = TRADE_LOG.reduce((sum, t) => {
+    if (!t.exitPrice || !t.amount || !t.entryPrice) return sum;
+    return sum + (t.exitPrice - t.entryPrice) / t.entryPrice * t.amount;
+  }, 0);
+  // Signal accuracy: did price reach T1 before stop?
+  const signalCorrect = TRADE_LOG.filter(t => t.outcome === 't1' || t.outcome === 't2').length;
+  const signalTotal = TRADE_LOG.filter(t => t.outcome !== 'open').length;
+
+  $('logTotalTrades').textContent = TRADE_LOG.length;
+  $('logWinRate').textContent = closed.length ? Math.round(wins.length/closed.length*100)+'%' : '—';
+  $('logT1Hit').textContent = TRADE_LOG.length ? Math.round(t1hits.length/TRADE_LOG.length*100)+'%' : '—';
+  $('logTotalPnl').textContent = totalPnl ? (totalPnl>=0?'+':'')+'$'+Math.abs(totalPnl).toFixed(0) : '—';
+  $('logTotalPnl').style.color = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+  $('logSignalAcc').textContent = signalTotal ? Math.round(signalCorrect/signalTotal*100)+'%' : '—';
+
+  // Avg R:R from closed trades with both entry/exit/stop
+  const rrTrades = closed.filter(t => t.entryPrice && t.exitPrice && t.sl);
+  const avgRR = rrTrades.length ? rrTrades.reduce((s,t) => {
+    const reward = Math.abs(t.exitPrice - t.entryPrice);
+    const risk = Math.abs(t.entryPrice - t.sl);
+    return s + (risk > 0 ? reward/risk : 0);
+  }, 0) / rrTrades.length : null;
+  $('logAvgRR').textContent = avgRR ? avgRR.toFixed(1)+':1' : '—';
+}
+
+function parseLogPaste() {
+  const text = $('logPaste').value;
+  // Try to extract price, quantity, amount from brokerage paste
+  const priceMatch = text.match(/\$?([\d,]+\.?\d*)\s*(per share|each|@ |at )/i) || text.match(/price[:\s]+\$?([\d,]+\.?\d*)/i);
+  const qtyMatch = text.match(/(\d+\.?\d*)\s*shares?|qty[:\s]+(\d+\.?\d*)/i);
+  const amtMatch = text.match(/total[:\s]+\$?([\d,]+\.?\d*)|amount[:\s]+\$?([\d,]+\.?\d*)/i);
+  if (priceMatch) $('logEntryPrice').value = priceMatch[1].replace(',','');
+  if (qtyMatch) {/* qty not directly used but could compute amount */}
+  if (amtMatch) $('logAmount').value = (amtMatch[1]||amtMatch[2]).replace(',','');
+  toggleLogForm();
+  $('logPaste').value = '';
+  showToast('Parsed — fill in any missing fields', true);
+}
+
+function exportLog() {
+  const headers = ['Date','Signal','Tier','Entry $','Amount $','T1 Target','Stop Loss','Exit $','Outcome','Notes'];
+  const rows = TRADE_LOG.map(t => [t.date,t.signal,t.tier,t.entryPrice,t.amount,t.t1,t.sl,t.exitPrice,t.outcome,t.notes].join(','));
+  const csv = [headers.join(','), ...rows].join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'eth-trade-log.csv';
+  a.click();
+}
+
+// Init trade log and position sizer
+loadTradeLog();
+calcPositionSize();
 </script>
 </body>
 </html>
