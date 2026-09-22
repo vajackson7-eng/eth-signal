@@ -103,7 +103,7 @@
     .main-grid-scroll-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 8px; }
     .main-grid { min-width: 900px; margin: 0 0 16px; border-radius: 0; }
     #tradeTopWrap { padding: 0 12px 12px; }
-    #tradeTopWrap > div > div[id=tradeTopGrid] { grid-template-columns: 1fr 1fr; gap: 6px; }
+    #tradeTopWrap > div > div[id=tradeTopGrid] { grid-template-columns: 1fr 1fr; gap: 6px; overflow-x: auto; }
     .signal-banner { padding: 12px; }
     div[style*="padding: 0 24px 16px"] { padding: 0 12px 12px !important; }
     .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -303,12 +303,12 @@
 <div style="padding: 0 24px 16px;" id="tradeTopWrap">
   <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px 20px;">
     <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:2px;color:var(--gold);margin-bottom:12px;">⚡ Trade Recommendation</div>
-    <div class="trade-top-grid" style="display:grid;grid-template-columns:repeat(8,1fr);gap:8px;" id="tradeTopGrid">
+    <div class="trade-top-grid" style="display:grid;grid-template-columns:1.4fr 2.2fr 1fr 1fr 1fr 1fr 1fr;gap:8px;" id="tradeTopGrid">
       <div style="background:var(--bg3);border-radius:8px;padding:10px 12px;">
         <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin-bottom:4px;">Action</div>
-        <div style="font-size:15px;font-weight:700;font-family:'DM Mono',monospace;" id="tradeTopAction">—</div>
+        <div style="font-size:14px;font-weight:700;font-family:'DM Mono',monospace;" id="tradeTopAction">—</div>
       </div>
-      <div style="background:var(--bg3);border-radius:8px;padding:10px 12px;grid-column:span 2;">
+      <div style="background:var(--bg3);border-radius:8px;padding:10px 12px;">
         <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text2);margin-bottom:6px;">Entry Tiers</div>
         <div style="display:flex;flex-direction:column;gap:4px;" id="tradeTopEntry">—</div>
       </div>
@@ -625,49 +625,81 @@ function switchTab(group, tab) {
 // Falls back gracefully if rate-limited
 // ============================================================
 let priceFailCount = 0;
-async function pollPrice() {
-  try {
-    // Try CoinGecko simple price (most likely to pass CSP)
-    const url = 'https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd&include_24hr_change=true';
-    const res = await fetch(url, { cache: 'no-store' });
-    if (!res.ok) throw new Error('status ' + res.status);
-    const data = await res.json();
-    const price = data?.ethereum?.usd;
-    const change24h = data?.ethereum?.usd_24h_change;
+let priceSource = 0; // rotate between sources
+
+async function fetchPriceFromSource(src) {
+  if (src === 0) {
+    // Binance public REST (no API key needed)
+    const res = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=ETHUSDT', { cache: 'no-store' });
+    if (!res.ok) throw new Error('Binance ' + res.status);
+    const d = await res.json();
+    const price = parseFloat(d.lastPrice);
+    const change24h = parseFloat(d.priceChangePercent);
     if (!price) throw new Error('no price');
-
-    priceFailCount = 0;
-    const prevPrice = STATE.price;
-    STATE.price = price;
-    if (change24h != null) STATE.price24hAgo = price / (1 + change24h / 100);
-
-    $('livePrice').textContent = '$' + fmt(price);
-    const cp = $('priceChange24h');
-    if (change24h != null) {
-      cp.textContent = (change24h >= 0 ? '+' : '') + change24h.toFixed(2) + '%';
-      cp.className = 'price-change ' + (change24h >= 0 ? 'up' : 'down');
-    }
-    $('lastUpdate').textContent = new Date().toLocaleTimeString();
-    setStatus('live', 'Live');
-
-    // Instantly update trade bar with new price
-    updateTradeTopBar(price);
-    updatePositionPanel();
-
-    // Re-run full analysis if price moved >0.5% since last analysis
-    if (STATE.lastAnalysisPrice && Math.abs(price - STATE.lastAnalysisPrice) / STATE.lastAnalysisPrice > 0.005) {
-      if (!STATE.reanalysisTimer) {
-        STATE.reanalysisTimer = setTimeout(() => {
-          STATE.reanalysisTimer = null;
-          runFullAnalysis();
-        }, 3000);
-      }
-    }
-  } catch(err) {
-    priceFailCount++;
-    if (priceFailCount >= 3) setStatus('error', 'Price unavailable — hit Analyze');
-    console.warn('Price poll failed:', err.message);
+    return { price, change24h };
+  } else if (src === 1) {
+    // Kraken public REST
+    const res = await fetch('https://api.kraken.com/0/public/Ticker?pair=ETHUSD', { cache: 'no-store' });
+    if (!res.ok) throw new Error('Kraken ' + res.status);
+    const d = await res.json();
+    const pair = d.result?.XETHZUSD || d.result?.ETHUSD;
+    const price = parseFloat(pair?.c?.[0]);
+    if (!price) throw new Error('no price');
+    return { price, change24h: null };
+  } else {
+    // CoinGecko fallback
+    const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd&include_24hr_change=true', { cache: 'no-store' });
+    if (!res.ok) throw new Error('CoinGecko ' + res.status);
+    const d = await res.json();
+    const price = d?.ethereum?.usd;
+    const change24h = d?.ethereum?.usd_24h_change;
+    if (!price) throw new Error('no price');
+    return { price, change24h };
   }
+}
+
+async function pollPrice() {
+  const sources = [0, 1, 2];
+  let lastErr;
+  for (let i = 0; i < sources.length; i++) {
+    const src = (priceSource + i) % 3;
+    try {
+      const { price, change24h } = await fetchPriceFromSource(src);
+      priceSource = src; // stick with what worked
+      priceFailCount = 0;
+
+      STATE.price = price;
+      if (change24h != null) STATE.price24hAgo = price / (1 + change24h / 100);
+
+      $('livePrice').textContent = '$' + fmt(price);
+      const cp = $('priceChange24h');
+      if (change24h != null) {
+        cp.textContent = (change24h >= 0 ? '+' : '') + change24h.toFixed(2) + '%';
+        cp.className = 'price-change ' + (change24h >= 0 ? 'up' : 'down');
+      }
+      $('lastUpdate').textContent = new Date().toLocaleTimeString();
+      setStatus('live', 'Live');
+
+      updateTradeTopBar(price);
+      updatePositionPanel();
+
+      if (STATE.lastAnalysisPrice && Math.abs(price - STATE.lastAnalysisPrice) / STATE.lastAnalysisPrice > 0.005) {
+        if (!STATE.reanalysisTimer) {
+          STATE.reanalysisTimer = setTimeout(() => {
+            STATE.reanalysisTimer = null;
+            runFullAnalysis();
+          }, 3000);
+        }
+      }
+      return; // success — done
+    } catch(err) {
+      lastErr = err;
+      console.warn(`Price source ${src} failed:`, err.message);
+    }
+  }
+  // All sources failed
+  priceFailCount++;
+  if (priceFailCount >= 3) setStatus('error', 'Price unavailable — hit Analyze');
 }
 
 async function downloadSelf() {
@@ -1226,12 +1258,25 @@ function computeSignal(candles, price, fearGreed, tvl, globalData) {
 // ============================================================
 function renderSignal(d, price) {
   const s = d.signal;
+
+  // Determine if price is above the Better entry tier (i.e. not yet at support)
+  const isBullish = s === 'BUY' || s === 'STRONG_BUY';
+  const ema21 = d.ema21 || price * 0.955;
+  const tier2 = Math.max(ema21, price * 0.94);
+  const distToTier2 = (price - tier2) / price;
+  const waitingForPullback = isBullish && distToTier2 > 0.01;
+
+  // Hero display: if bullish but price hasn't pulled back, show WAIT
+  const heroKey = waitingForPullback ? 'WAIT' : s;
+  const heroText = waitingForPullback ? 'WAIT' : signalDisplay(s);
+  const heroClass = waitingForPullback ? 'HOLD' : s; // yellow styling for WAIT
+
   const sc = $('signalCard');
-  sc.className = `signal-card ${s}`;
+  sc.className = `signal-card ${heroClass}`;
 
   const sv = $('signalValue');
-  sv.textContent = signalDisplay(s);
-  sv.className = `signal-value ${s}`;
+  sv.textContent = heroText;
+  sv.className = `signal-value ${heroClass}`;
 
   // Subtext
   const subMap = {
@@ -1240,8 +1285,9 @@ function renderSignal(d, price) {
     HOLD: `Mixed signals — no clear directional edge. Hold current position; avoid adding exposure until clearer setup.`,
     SELL: `Bearish tilt. Risk/reward favors reducing exposure or shorting with tight risk management.`,
     STRONG_SELL: `Significant bearish alignment across indicators. High-probability distribution or downtrend — consider exiting longs.`,
+    WAIT: `Technicals are bullish but price hasn't pulled back to a good entry yet. Watch the Entry Tiers below — buy the dip, not the peak.`,
   };
-  $('signalSub').textContent = subMap[s];
+  $('signalSub').textContent = subMap[heroKey] || subMap[s];
 
   // Confidence ring
   const pct = d.composite;
